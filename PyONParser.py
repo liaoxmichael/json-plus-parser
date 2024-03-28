@@ -205,24 +205,26 @@ def parse_pair(current_tokens: list) -> ParsedPair | None:
         return ParsedPair(ParsedPair.PairType.EMPTY)
     
     # production 4
-    comma_status = True
-    pair1 = parse_pair(current_tokens)
-    if not match(current_tokens, ','):
-        comma_status = False
-    pair2 = parse_pair(current_tokens)
+    if current_tokens[1] == ',': # looking ahead to see if we have a comma
+        comma_status = True
+        pair1 = parse_pair(current_tokens)
+        if not match(current_tokens, ','):
+            comma_status = False
+        pair2 = parse_pair(current_tokens)
         
-    if (pair1 and comma_status and pair2):
-        return ParsedPair(ParsedPair.PairType.MULTI_PAIR, (pair1.value, pair2.value))
+        if (pair1 and comma_status and pair2):
+            return ParsedPair(ParsedPair.PairType.MULTI_PAIR, (pair1.value, pair2.value))
 
     # production 3
-    colon_status = True
-    key = parse_key(current_tokens)
-    if not match(current_tokens, ':'):
-        colon_status = False
-    value = parse_value(current_tokens)
-    
-    if (key and colon_status and value):
-        return ParsedPair(ParsedPair.PairType.KEY_VALUE, (key, value))
+    elif current_tokens[1] == ':':
+        colon_status = True
+        key = parse_key(current_tokens)
+        if not match(current_tokens, ':'):
+            colon_status = False
+        value = parse_value(current_tokens)
+        
+        if (key and colon_status and value):
+            return ParsedPair(ParsedPair.PairType.KEY_VALUE, (key, value))
     
     return None
 
@@ -254,16 +256,18 @@ def parse_item(current_tokens: list) -> ParsedListItem | None:
         return ParsedListItem(ParsedListItem.ListItemType.EMPTY)
 
     # production 15
-    comma_status = True
-    item1 = parse_item(current_tokens)
-    if not match(current_tokens, ','):
-        comma_status = False
-    item2 = parse_item(current_tokens)
+    if current_tokens[1] == ',': # looking ahead to see if we have a comma
+        comma_status = True
+        item1 = parse_item(current_tokens)
+        if not match(current_tokens, ','):
+            comma_status = False
+        item2 = parse_item(current_tokens)
 
-    if (item1 and comma_status and item2):
-        return ParsedListItem(ParsedListItem.ListItemType.MULTI_ITEM, (item1.value, item2.value))   
+        if (item1 and comma_status and item2):
+            return ParsedListItem(ParsedListItem.ListItemType.MULTI_ITEM, (item1.value, item2.value))   
    
     # production 14
+    # elif current_tokens[0] != ']': # looking ahead to see if single value
     value = parse_value(current_tokens)
     if value:
         return ParsedListItem(ParsedListItem.ListItemType.VALUE, value)
