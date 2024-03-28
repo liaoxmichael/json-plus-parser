@@ -21,3 +21,4 @@
 :
 true
 }
+The file was not in valid JSON+ format!

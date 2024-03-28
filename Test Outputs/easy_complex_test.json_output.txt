@@ -25,3 +25,4 @@ true
 :
 1+2i
 }
+The file was not in valid JSON+ format!
