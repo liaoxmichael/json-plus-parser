@@ -1,8 +1,20 @@
+#!/usr/bin/python3
 """
 Michael Liao
 CSC 374
 PyON Parser
 """
+DESCRIPTION = '''
+A homebrew JSON parser which extends standard JSON with sets and complex numbers.
+'''
+
+import argparse
+import os.path
+import sys
+import re
+from enum import IntEnum
+
+YOUR_NAME_HERE = "Michael Liao" # Replace this with your name.
 
 """
 0. High-Level Terminals
@@ -39,28 +51,27 @@ G = (
 
         P --> K : V     // 3
         P --> P, P      // 4
-        P --> ε         // 5
+        P --> P,        // 5 < ??
+        P --> ε         // 6
 
-        K --> (STR)     // 6
+        K --> (STR)     // 7
 
-        V --> (BOOL)    // 7
-        V --> (INT)     // 8
-        V --> (FLOAT)   // 9
-        V --> (STR)     // 10
-        V --> O         // 11
-        V --> L         // 12
+        V --> (BOOL)    // 8
+        V --> (INT)     // 9
+        V --> (FLOAT)   // 10
+        V --> (STR)     // 11
+        V --> O         // 12
+        V --> L         // 13
 
-        L --> [ I ]     // 13
+        L --> [ I ]     // 14
+        L --> [ I, ]    // 15 < ??
 
-        I --> V         // 14
-        I --> I, I      // 15
-        I --> ε         // 16
+        I --> V         // 16
+        I --> I, I      // 17
+        I --> ε         // 18
     }
 )
 """
-import sys
-import re
-from enum import IntEnum
 
 class ParsedGeneric():
     """A generic class for parsed objects."""
@@ -311,13 +322,18 @@ def parse_value(current_tokens: list) -> bool | int | float | str | dict | list 
     return None
 
 def main():
-    # filepath = sys.argv[1]
-    filepath = "Sample JSON Input Files/easy_test.json" # debug
-    result = parse_file(filepath)
-    if result:
-        print(result)
-    else:
-        print("The file was not in valid JSON+ format!")
+    ap = argparse.ArgumentParser(description=(DESCRIPTION + f"\nBy: {YOUR_NAME_HERE}"))
+    ap.add_argument('file_name', action='store', help='Name of the JSON file to read.')
+    args = ap.parse_args()
+
+    file_name = args.file_name
+    local_dir = os.path.dirname(__file__)
+    file_path = os.path.join(local_dir, file_name)
+
+    dictionary = parse_file(file_path)
+
+    print('DICTIONARY:')
+    print(dictionary)
 
 if __name__ == "__main__":
     main()
