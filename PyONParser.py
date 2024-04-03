@@ -11,10 +11,11 @@ A homebrew JSON parser which extends standard JSON with sets and complex numbers
 import argparse
 import os.path
 import sys
+
 import re
 from enum import IntEnum
 
-YOUR_NAME_HERE = "Michael Liao" # Replace this with your name.
+YOUR_NAME_HERE = "Michael Liao"
 
 """
 0. High-Level Terminals
@@ -51,24 +52,22 @@ G = (
 
         P --> K : V     // 3
         P --> P, P      // 4
-        P --> P,        // 5 < ??
-        P --> ε         // 6
+        P --> ε         // 5
 
-        K --> (STR)     // 7
+        K --> (STR)     // 6
 
-        V --> (BOOL)    // 8
-        V --> (INT)     // 9
-        V --> (FLOAT)   // 10
-        V --> (STR)     // 11
-        V --> O         // 12
-        V --> L         // 13
+        V --> (BOOL)    // 7
+        V --> (INT)     // 8
+        V --> (FLOAT)   // 9
+        V --> (STR)     // 10
+        V --> O         // 11
+        V --> L         // 12
 
-        L --> [ I ]     // 14
-        L --> [ I, ]    // 15 < ??
+        L --> [ I ]     // 13
 
-        I --> V         // 16
-        I --> I, I      // 17
-        I --> ε         // 18
+        I --> V         // 14
+        I --> I, I      // 15
+        I --> ε         // 16
     }
 )
 """
@@ -91,9 +90,10 @@ class ParsedGeneric():
 class ParsedPair(ParsedGeneric):
     """Utility class for determining the result of parse_pair()."""
     class PairType(IntEnum):
+        EMPTY = 0
         KEY_VALUE = 1
-        MULTI_PAIR = 2
-        EMPTY = 3
+        # MULTI_PAIR = 2
+        
     
     value: tuple
 
@@ -104,9 +104,9 @@ class ParsedPair(ParsedGeneric):
 class ParsedListItem(ParsedGeneric):
     """Utility class for determining the result of parse_item()."""
     class ListItemType(IntEnum):
+        EMPTY = 0
         VALUE = 1
-        MULTI_ITEM = 2
-        EMPTY = 3
+        # MULTI_ITEM = 2
     
     value: tuple
 
@@ -128,7 +128,7 @@ def tokenize_file(file) -> list:
 
 def parse_file(filepath: str) -> dict | None: # this also functions as our parse_start function
     """
-    Parses a file and returns a representative Python dictionary if the file is syntactically correct, None otherwise.
+    Parses a file and returns a representative Python dictionary if the file is valid JSON, None otherwise.
     Handles production 1: S --> O.
     """
     with open(filepath, "r") as file:
@@ -136,23 +136,21 @@ def parse_file(filepath: str) -> dict | None: # this also functions as our parse
         # early return; all objects need to begin/end with curly braces
         if tokens[0] != '{' or tokens[-1] != '}':
             return None
-        
-        return parse_object(tokens)
+        return parse_object(tokens)[0] # all subsequent function calls always return the parse result, then the list of tokens; so we need to pull out the first item in the tuple
 
-def match(current_tokens: list, token: str) -> bool:
+def match(current_tokens: list, token: str) -> tuple[bool, list]:
     """Matches the current symbol in input and advances it."""
     if current_tokens[0] == token:
-        current_tokens.pop(0)
-        return True
-    return False
+        return True, current_tokens[1:]
+    return False, current_tokens
 
 # need to define custom match functions for each high-level terminal
 # using None as a sentinel value for failure; False could be a valid value from match_bool()
-def match_bool(current_tokens: list) -> bool | None:
+def match_bool(current_tokens: list) -> tuple[bool | None, list]:
     """Matches a (BOOL) and advances the input."""
     if current_tokens[0] == 'true' or current_tokens[0] == 'false':
-        return str_to_bool(current_tokens.pop(0))
-    return None
+        return str_to_bool(current_tokens[0]), current_tokens[1:]
+    return None, current_tokens
 
 # this one needs a custom type conversion function
 def str_to_bool(string: str) -> bool | None:
@@ -164,162 +162,157 @@ def str_to_bool(string: str) -> bool | None:
     
     return None
 
-def match_int(current_tokens: list) -> int | None:
+def match_int(current_tokens: list) -> tuple[int | None, list]:
     """Matches an (INT) and advances the input."""
     try:
-        int(current_tokens[0])
-        return int(current_tokens.pop(0))
+        return int(current_tokens[0]), current_tokens[1:]
     except ValueError:
-        return None
+        return None, current_tokens
     
-def match_float(current_tokens: list) -> float | None:
+def match_float(current_tokens: list) -> tuple[float | None, list]:
     """Matches a (FLOAT) and advances the input."""
     try:
-        float(current_tokens[0])
-        return float(current_tokens.pop(0))
+        return float(current_tokens[0]), current_tokens[1:]
     except ValueError:
-        return None
+        return None, current_tokens
     
-def match_str(current_tokens: list) -> str | None:
+def match_str(current_tokens: list) -> tuple[str | None, list]:
     """Matches a (STR) and advances the input."""
     if current_tokens[0][0] == '"' or current_tokens[0][0] == "'":
         if current_tokens[0][0] == current_tokens[0][-1]:
-            return current_tokens.pop(0)
-    return None
+            return current_tokens[0][1:-1], current_tokens[1:] # funky notation to slice off quote ends here
+    return None, current_tokens
+
+match_high_level_terminals_list = [
+    match_bool,
+    match_int,
+    match_float,
+    match_str
+]
 
 # defining individual parse nonterminal functions for recursive descent
 # all return True if they successfully parse the given tokens, None otherwise
-def parse_object(current_tokens: list) -> dict | None:
-    """Handles production 2: O --> { P }"""
-    if not match(current_tokens, '{'):
-        return None
-    pair = parse_pair(current_tokens)
-    if not match(current_tokens, '}'):
-        return None
-    
-    if pair:
-        if pair.status == ParsedPair.PairType.KEY_VALUE:
-            return {pair.value[0]: pair.value[1]}
-        elif pair.status == ParsedPair.PairType.MULTI_PAIR:
-            return {pair.value[0], pair.value[1]}
-        else:
-            return {}
-    
-    return None
+def parse_object(current_tokens: list) -> tuple[dict | None, list]:
+    """
+    Handles production 2: O --> { P }
+    Technically also handles production 4 in a loop: P --> P, P
+    """
+    matched, next_tokens = match(current_tokens, '{')
+    if not matched:
+        return None, current_tokens
 
-def parse_pair(current_tokens: list) -> ParsedPair | None:
+    # looping and finding pairs until we terminate - if only one pair, production 2; if multiple pairs, production 4
+    matched = True
+    pairs = {}
+    while matched and len(next_tokens) > 0:
+        pair, next_tokens = parse_pair(next_tokens)
+        if pair is not None:
+            if pair.status == ParsedPair.PairType.KEY_VALUE:
+                pairs[pair.value[0]] = pair.value[1]
+            matched, next_tokens = match(next_tokens, ',')
+            # if matched is False, no more pairs
+            # possible to have trailing comma
+        else:
+            break # if pair is None, we're done - no more things to parse
+    
+    matched, next_tokens = match(next_tokens, '}') # check for closing brace
+
+    if not matched:
+        return None, current_tokens
+    
+    # else object should be valid
+    return pairs, next_tokens
+
+def parse_pair(current_tokens: list) -> tuple[ParsedPair | None, list]:
     """
     Returns a ParsedPair object if the pair is successfully parsed. Else, returns None.
-    Handles productions 3, 4, 5: P --> K : V | P, P | ε
+    Handles productions 3, 5: P --> K : V | ε
     """
     if len(current_tokens) == 0: # production 5
-        return ParsedPair(ParsedPair.PairType.EMPTY)
+        return ParsedPair(ParsedPair.PairType.EMPTY), current_tokens[1:]
     
-    # production 4
-    if current_tokens[1] == ',': # looking ahead to see if we have a comma
-        comma_status = True
-        pair1 = parse_pair(current_tokens)
-        if not match(current_tokens, ','):
-            comma_status = False
-        pair2 = parse_pair(current_tokens)
-        
-        if (pair1 and comma_status and pair2):
-            return ParsedPair(ParsedPair.PairType.MULTI_PAIR, (pair1.value, pair2.value))
+    # production 4 - handled in loop in parse_object()
 
     # production 3
     elif current_tokens[1] == ':':
-        colon_status = True
-        key = parse_key(current_tokens)
-        if not match(current_tokens, ':'):
-            colon_status = False
-        value = parse_value(current_tokens)
+        key, next_tokens = parse_key(current_tokens)
+        colon_status, next_tokens = match(next_tokens, ':')
+        value, next_tokens = parse_value(next_tokens)
         
         if (key and colon_status and value):
-            return ParsedPair(ParsedPair.PairType.KEY_VALUE, (key, value))
+            return ParsedPair(ParsedPair.PairType.KEY_VALUE, (key, value)), next_tokens
     
-    return None
+    return None, current_tokens
 
-def parse_key(current_tokens: list) -> str | None:
+def parse_key(current_tokens: list) -> tuple[str | None, list]:
     """Handles production 6: K --> (STR)"""
     return match_str(current_tokens)
 
 def parse_list(current_tokens: list) -> list | None:
-    """Handles production 13: L --> [ I ]"""
-    if not match(current_tokens, '['):
-        return None
-    item = parse_item(current_tokens)
-    if not match(current_tokens, ']'):
-        return None
+    """
+    Handles production 13: L --> [ I ]
+    Technically also handles production 15 in a loop: I --> I, I
+    """
+    matched, next_tokens = match(current_tokens, '[')
+    if not matched:
+        return None, current_tokens
     
-    if item:
-        if item.status == ParsedListItem.ListItemType.VALUE:
-            return [item.value]
-        elif item.status == ParsedListItem.ListItemType.MULTI_ITEM:
-            return [item.value[0], item.value[1]]
+    # looping and finding list items until we terminate - if only one item, production 13; if multiple, production 15
+    matched = True
+    items = []
+    while matched and len(next_tokens) > 0:
+        item, next_tokens = parse_item(next_tokens)
+        if item is not None:
+            if item.status == ParsedListItem.ListItemType.VALUE:
+                items.append(item.value)
+            matched, next_tokens = match(next_tokens, ',')
+            # if matched is False, no more items
+            # possible to have trailing comma
         else:
-            return []
-        
-    return None
+            break # if pair is None, we're done - no more things to parse
 
-def parse_item(current_tokens: list) -> ParsedListItem | None:
-    """Handles productions 14, 15, 16: I --> V | I, I | ε"""
+    matched, current_tokens = match(next_tokens, ']')
+
+    if not matched:
+        return None, current_tokens
+    
+    # else items should be valid
+    return items, current_tokens
+
+def parse_item(current_tokens: list) -> tuple[ParsedListItem | None, list]:
+    """Handles productions 14, 16: I --> V | ε"""
     if len(current_tokens) == 0: # production 16
-        return ParsedListItem(ParsedListItem.ListItemType.EMPTY)
+        return ParsedListItem(ParsedListItem.ListItemType.EMPTY), current_tokens[1:]
 
-    # production 15
-    if current_tokens[1] == ',': # looking ahead to see if we have a comma
-        comma_status = True
-        item1 = parse_item(current_tokens)
-        if not match(current_tokens, ','):
-            comma_status = False
-        item2 = parse_item(current_tokens)
-
-        if (item1 and comma_status and item2):
-            return ParsedListItem(ParsedListItem.ListItemType.MULTI_ITEM, (item1.value, item2.value))   
+    # production 15 - handled in loop in parse_list()
    
     # production 14
-    # elif current_tokens[0] != ']': # looking ahead to see if single value
-    value = parse_value(current_tokens)
-    if value:
-        return ParsedListItem(ParsedListItem.ListItemType.VALUE, value)
+    value, next_tokens = parse_value(current_tokens)
+    if value is not None:
+        return ParsedListItem(ParsedListItem.ListItemType.VALUE, value), next_tokens
     
-    return None
+    return None, current_tokens
 
-    
-def parse_value(current_tokens: list) -> bool | int | float | str | dict | list | None:
+def parse_value(current_tokens: list) -> tuple[bool | int | float | str | dict | list | None, list]:
     """Handles productions 7, 8, 9, 10, 11, 12: V --> (BOOL) | (INT) | (FLOAT) | (STR) | O | L"""
-    
-    # production 7
-    is_bool = match_bool(current_tokens)
-    if is_bool is not None:
-        return is_bool
-    
-    # production 8
-    is_int = match_int(current_tokens)
-    if is_int is not None:
-        return is_int
-    
-    # production 9
-    is_float = match_float(current_tokens)
-    if is_float is not None:
-        return is_float
-    
-    # production 10
-    is_str = match_str(current_tokens)
-    if is_str is not None:
-        return is_str
+
+    # productions 7-10
+    for match_fn in match_high_level_terminals_list:
+        is_terminal, next_tokens = match_fn(current_tokens)
+        if is_terminal is not None:
+            return is_terminal, next_tokens
     
     # production 11
-    object = parse_object(current_tokens)
-    if object:
-        return object
+    object, next_tokens = parse_object(current_tokens)
+    if object is not None:
+        return object, next_tokens
     
     # production 12
-    list = parse_list(current_tokens)
-    if list:
-        return list
+    list, next_tokens = parse_list(current_tokens)
+    if list is not None:
+        return list, next_tokens
     
-    return None
+    return None, current_tokens
 
 def main():
     ap = argparse.ArgumentParser(description=(DESCRIPTION + f"\nBy: {YOUR_NAME_HERE}"))
@@ -329,6 +322,9 @@ def main():
     file_name = args.file_name
     local_dir = os.path.dirname(__file__)
     file_path = os.path.join(local_dir, file_name)
+
+    # file_path = "Sample JSON Input Files/easy_test.json" # debug
+    # file_path = "Sample JSON Input Files/medium_test.json" # debug
 
     dictionary = parse_file(file_path)
 

@@ -1,24 +1,2 @@
-{
-"name"
-:
-"Robin"
-,
-"age"
-:
-29
-,
-"hobbies"
-:
-[
-"larceny    "
-,
-"archery"
-,
-"philanthropy"
-]
-,
-"is_handsome"
-:
-true
-}
-The file was not in valid JSON+ format!
+DICTIONARY:
+{'name': 'Robin', 'age': 29, 'hobbies': ['larceny    ', 'archery', 'philanthropy'], 'is_handsome': True}
