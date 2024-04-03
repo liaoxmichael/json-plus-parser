@@ -46,30 +46,52 @@ G = (
         (STR)
     },
     S = O,
-    P = {               // production numbers
-        S --> O         // 1
-        O --> { P }     // 2
+    P = {                       // production numbers
+        S --> O                 // 1
+        O --> { P }             // 2
 
-        P --> K : V     // 3
-        P --> P, P      // 4
-        P --> ε         // 5
+        P --> K : V             // 3
+        P --> P, P              // 4
+        P --> ε                 // 5
 
-        K --> (STR)     // 6
+        K --> (STR)             // 6
 
-        V --> (BOOL)    // 7
-        V --> (INT)     // 8
-        V --> (FLOAT)   // 9
-        V --> (STR)     // 10
-        V --> O         // 11
-        V --> L         // 12
+        V --> (BOOL)            // 7
+        V --> (INT)             // 8
+        V --> (FLOAT)           // 9
+        V --> (STR)             // 10
+        V --> O                 // 11
+        V --> L                 // 12
 
-        L --> [ I ]     // 13
+        L --> [ I ]             // 13
 
-        I --> V         // 14
-        I --> I, I      // 15
-        I --> ε         // 16
+        I --> V                 // 14
+        I --> I, I              // 15
+        I --> ε                 // 16
     }
 )
+
+3. Extend the Standard:
+We now define a grammar G' = (V', ∑', S, P') where:
+V' = V ∪ {T( for seT), E(lement of a Set), C(omplex)}
+P' = P ∪ {
+    V --> C                     // 17
+    V --> T                     // 18
+
+    T --> { E }                 // 19
+
+    E --> (STR)                 // 20
+    E --> (INT)                 // 21
+    E --> (FLOAT)               // 22
+    E --> C                     // 23
+    E --> E, E                  // 24
+    E --> ε                     // 25
+
+    C --> (FLOAT) + (FLOAT)i    // 26
+    C --> (FLOAT) - (FLOAT)i    // 27
+    C --> (FLOAT)i              // 28
+    C --> -(C)                  // 29
+}
 """
 
 class ParsedGeneric():
@@ -92,8 +114,6 @@ class ParsedPair(ParsedGeneric):
     class PairType(IntEnum):
         EMPTY = 0
         KEY_VALUE = 1
-        # MULTI_PAIR = 2
-        
     
     value: tuple
 
@@ -106,7 +126,6 @@ class ParsedListItem(ParsedGeneric):
     class ListItemType(IntEnum):
         EMPTY = 0
         VALUE = 1
-        # MULTI_ITEM = 2
     
     value: tuple
 
@@ -182,6 +201,16 @@ def match_str(current_tokens: list) -> tuple[str | None, list]:
         if current_tokens[0][0] == current_tokens[0][-1]:
             return current_tokens[0][1:-1], current_tokens[1:] # funky notation to slice off quote ends here
     return None, current_tokens
+
+def match_complex(current_tokens: list) -> tuple[complex | None, list]:
+    """Matches a (COMPLEX) and advances the input."""
+    # last thing should be i
+    if current_tokens[0][-1] != 'i': # early termination
+        return None, current_tokens
+
+    j_token = current_tokens[0][:-1] + 'j' # Python's complex wants it to be j, so replace it
+    
+    
 
 match_high_level_terminals_list = [
     match_bool,
