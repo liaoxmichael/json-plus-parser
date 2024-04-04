@@ -1,2 +1,2 @@
 DICTIONARY:
-None
+{'name': 'Robin', 'age': 29, 'hobbies': ['stealing', 'archery', 'philanthropy'], 'is_handsome': True, 'a_complex': (1+2j)}

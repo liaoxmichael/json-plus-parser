@@ -73,9 +73,10 @@ G = (
 
 3. Extend the Standard:
 We now define a grammar G' = (V', ∑', S, P') where:
-V' = V ∪ {T( for seT), E(lement of a Set), C(omplex)}
+V' = V ∪ {T( for seT), E(lement of a Set)}
+∑' = ∑ ∪ {+, -, i, (COMPLEX)}
 P' = P ∪ {
-    V --> C                     // 17
+    V --> (COMPLEX)             // 17
     V --> T                     // 18
 
     T --> { E }                 // 19
@@ -83,15 +84,20 @@ P' = P ∪ {
     E --> (STR)                 // 20
     E --> (INT)                 // 21
     E --> (FLOAT)               // 22
-    E --> C                     // 23
+    E --> (COMPLEX)             // 23
     E --> E, E                  // 24
     E --> ε                     // 25
-
-    C --> (FLOAT) + (FLOAT)i    // 26
-    C --> (FLOAT) - (FLOAT)i    // 27
-    C --> (FLOAT)i              // 28
-    C --> -(C)                  // 29
 }
+
+We also define a new high-level terminal:
+(COMPLEX) --> any complex number matching the forms below, where N is a (FLOAT):
+     N+Ni
+     N-Ni
+    -N-Ni
+    +N+Ni
+       Ni
+      +Ni
+      -Ni
 """
 
 class ParsedGeneric():
@@ -204,20 +210,11 @@ def match_str(current_tokens: list) -> tuple[str | None, list]:
 
 def match_complex(current_tokens: list) -> tuple[complex | None, list]:
     """Matches a (COMPLEX) and advances the input."""
-    # last thing should be i
-    if current_tokens[0][-1] != 'i': # early termination
-        return None, current_tokens
-
-    j_token = current_tokens[0][:-1] + 'j' # Python's complex wants it to be j, so replace it
-    
-    
-
-match_high_level_terminals_list = [
-    match_bool,
-    match_int,
-    match_float,
-    match_str
-]
+    if current_tokens[0][-1] == "i": # python complex numbers use j, need to change the end
+        # error occurs when there is extra whitespace inside the string: need to remove
+        complex_token = current_tokens[0].replace(' ', '')
+        return complex(complex_token[:-1] + 'j'), current_tokens[1:]
+    return None, current_tokens
 
 # defining individual parse nonterminal functions for recursive descent
 # all return True if they successfully parse the given tokens, None otherwise
@@ -236,6 +233,7 @@ def parse_object(current_tokens: list) -> tuple[dict | None, list]:
     while matched and len(next_tokens) > 0:
         pair, next_tokens = parse_pair(next_tokens)
         if pair is not None:
+            # print(pair) # debug
             if pair.status == ParsedPair.PairType.KEY_VALUE:
                 pairs[pair.value[0]] = pair.value[1]
             matched, next_tokens = match(next_tokens, ',')
@@ -263,13 +261,12 @@ def parse_pair(current_tokens: list) -> tuple[ParsedPair | None, list]:
     # production 4 - handled in loop in parse_object()
 
     # production 3
-    elif current_tokens[1] == ':':
-        key, next_tokens = parse_key(current_tokens)
-        colon_status, next_tokens = match(next_tokens, ':')
-        value, next_tokens = parse_value(next_tokens)
-        
-        if (key and colon_status and value):
-            return ParsedPair(ParsedPair.PairType.KEY_VALUE, (key, value)), next_tokens
+    key, next_tokens = parse_key(current_tokens)
+    colon_status, next_tokens = match(next_tokens, ':')
+    value, next_tokens = parse_value(next_tokens)
+    
+    if (key and colon_status and value):
+        return ParsedPair(ParsedPair.PairType.KEY_VALUE, (key, value)), next_tokens
     
     return None, current_tokens
 
@@ -323,10 +320,13 @@ def parse_item(current_tokens: list) -> tuple[ParsedListItem | None, list]:
     return None, current_tokens
 
 def parse_value(current_tokens: list) -> tuple[bool | int | float | str | dict | list | None, list]:
-    """Handles productions 7, 8, 9, 10, 11, 12: V --> (BOOL) | (INT) | (FLOAT) | (STR) | O | L"""
+    """
+    Handles productions 7, 8, 9, 10, 11, 12: V --> (BOOL) | (INT) | (FLOAT) | (STR) | O | L
+    Also handles productions 17, 18: V --> (COMPLEX) | T
+    """
 
-    # productions 7-10
-    for match_fn in match_high_level_terminals_list:
+    # productions 7-10 & 17
+    for match_fn in [match_bool, match_int, match_float, match_str, match_complex]:
         is_terminal, next_tokens = match_fn(current_tokens)
         if is_terminal is not None:
             return is_terminal, next_tokens
@@ -340,7 +340,59 @@ def parse_value(current_tokens: list) -> tuple[bool | int | float | str | dict |
     list, next_tokens = parse_list(current_tokens)
     if list is not None:
         return list, next_tokens
+
+    # production 18
+    set, next_tokens = parse_set(current_tokens)
+    if set is not None:
+        return set, next_tokens
+
+    return None, current_tokens
+
+def parse_set(current_tokens: list) -> tuple[set | None, list]:
+    """
+    Handles production 19: T --> { E }
+    Technically also handles production 24 in a loop: E --> E, E
+    """
+    matched, next_tokens = match(current_tokens, '{')
+    if not matched:
+        return None, current_tokens
+
+    # looping and finding elements until we terminate - if only one element, production 19; if multiple, production 24
+    matched = True
+    elements = set()
+    while matched and len(next_tokens) > 0:
+        element, next_tokens = parse_element(next_tokens)
+        if element is not None:
+            elements.add(element) # because it's a set, we don't need to validate
+            matched, next_tokens = match(next_tokens, ',')
+            # if matched is False, no more elements
+            # possible to have trailing comma
+        else:
+            break # if element is None, we're done - no more things to parse
+
+    matched, next_tokens = match(next_tokens, '}')
+
+    if not matched:
+        return None, current_tokens
     
+    # else set should be valid
+    return elements, next_tokens
+
+def parse_element(current_tokens: list) -> tuple[bool | int | float | complex | None, list]:
+    """
+    Handles productions 20, 21, 22, 23, 25: E --> (STR) | (INT) | (FLOAT) | (COMPLEX) | ε
+    """
+    if len(current_tokens) == 0: # production 25
+        return None, current_tokens[1:]
+
+    # productions 20-23
+    for match_fn in [match_int, match_float, match_str, match_complex]:
+        is_terminal, next_tokens = match_fn(current_tokens)
+        if is_terminal is not None:
+            return is_terminal, next_tokens
+        
+    # production 24 - handled in loop in parse_set()
+
     return None, current_tokens
 
 def main():
@@ -354,6 +406,10 @@ def main():
 
     # file_path = "Sample JSON Input Files/easy_test.json" # debug
     # file_path = "Sample JSON Input Files/medium_test.json" # debug
+    # file_path = "Sample JSON Input Files/hard_complex_test.json" # debug
+    # file_path = "Sample JSON Input Files/ocAEpU2CFdrfz.json"
+    # file_path = "Sample JSON Input Files/random_test.json" # debug
+    # file_path = "Sample JSON Input Files/zEAJGG3UFh6tbqz4.json" # debug
 
     dictionary = parse_file(file_path)
 

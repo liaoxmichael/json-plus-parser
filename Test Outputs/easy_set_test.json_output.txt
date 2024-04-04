@@ -1,2 +1,2 @@
 DICTIONARY:
-None
+{'name': 'Robin', 'age': 29, 'hobbies': ['stealing', 'archery', 'philanthropy'], 'is_handsome': True, 'merry_men': {"Much the Miller's Son", 'Lttle John', 'Friar Tuck'}}
