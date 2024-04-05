@@ -10,7 +10,6 @@ A homebrew JSON parser which extends standard JSON with sets and complex numbers
 
 import argparse
 import os.path
-import sys
 
 import re
 from enum import IntEnum
@@ -38,7 +37,9 @@ G = (
     ∑ = {
         :, 
         [, 
-        ], 
+        ],
+        {,
+        },
         ,, // note that this is a comma
         (BOOL), 
         (INT), 
